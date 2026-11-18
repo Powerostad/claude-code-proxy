@@ -3,6 +3,12 @@ title: Changelog
 description: Release notes for claude-code-proxy.
 ---
 
+## v0.1.49 (2026-11-18)
+
+- Codex users can select GPT-6.2 Sol and GPT-6.2 Astra with `gpt-6.2-sol` and
+  `gpt-6.2-astra`. Both support the `-fast` priority tier and the `-ultrafast`
+  service tier, and the opt-in full Responses lane supports parallel tool calls.
+
 ## v0.1.48 (2026-11-01)
 
 - Codex users can select GPT-6.1 Terra with `gpt-6.1-terra` or its
