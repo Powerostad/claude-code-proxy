@@ -23,6 +23,8 @@ pub const ALLOWED_MODELS: &[&str] = &[
     "gpt-6-sol",
     "gpt-6.1-sol",
     "gpt-6.1-terra",
+    "gpt-6.2-astra",
+    "gpt-6.2-sol",
 ];
 
 pub const MODEL_ALIASES: &[(&str, &str)] = &[
@@ -83,7 +85,8 @@ pub fn allowed_models_display() -> String {
 
 /// Models whose Codex catalog entry offers the `ultrafast` service tier.
 /// Every other model offers `priority` at most, so it gets no `-ultrafast` form.
-pub const ULTRAFAST_MODELS: &[&str] = &["gpt-6-astra", "gpt-6.1-sol"];
+pub const ULTRAFAST_MODELS: &[&str] =
+    &["gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"];
 
 const FAST_SUFFIX: &str = "-fast";
 const ULTRAFAST_SUFFIX: &str = "-ultrafast";
@@ -207,6 +210,8 @@ pub fn uses_responses_lite(model: &str) -> bool {
             | "gpt-6-sol"
             | "gpt-6.1-sol"
             | "gpt-6.1-terra"
+            | "gpt-6.2-astra"
+            | "gpt-6.2-sol"
     ) || (!ALLOWED_MODELS.contains(&model)
         && catalog_model(model)
             .is_some_and(|entry| entry.supported_in_api && entry.use_responses_lite))
@@ -224,6 +229,8 @@ pub fn uses_responses_lite_with_full_lane(model: &str, full_lane: bool) -> bool 
                 | "gpt-6-sol"
                 | "gpt-6.1-sol"
                 | "gpt-6.1-terra"
+                | "gpt-6.2-astra"
+                | "gpt-6.2-sol"
         )
     {
         return false;
@@ -272,6 +279,8 @@ mod tests {
             "gpt-6-sol",
             "gpt-6.1-sol",
             "gpt-6.1-terra",
+            "gpt-6.2-astra",
+            "gpt-6.2-sol",
         ] {
             assert!(uses_responses_lite_with_full_lane(model, false), "{model}");
             assert!(!uses_responses_lite_with_full_lane(model, true), "{model}");
@@ -294,6 +303,8 @@ mod tests {
         assert_eq!(full_lane_web_search_model("gpt-5.4"), "gpt-5.4");
         assert_eq!(full_lane_web_search_model("gpt-6-luna"), "gpt-6-sol");
         assert_eq!(full_lane_web_search_model("gpt-6-sol"), "gpt-6-sol");
+        assert_eq!(full_lane_web_search_model("gpt-6.2-astra"), "gpt-6.2-astra");
+        assert_eq!(full_lane_web_search_model("gpt-6.2-sol"), "gpt-6.2-sol");
     }
 
     #[test]
@@ -332,7 +343,13 @@ mod tests {
 
     #[test]
     fn gpt_6_sol_fast_adds_priority() {
-        for model in ["gpt-6-sol", "gpt-6.1-sol", "gpt-6.1-terra"] {
+        for model in [
+            "gpt-6-sol",
+            "gpt-6.1-sol",
+            "gpt-6.1-terra",
+            "gpt-6.2-astra",
+            "gpt-6.2-sol",
+        ] {
             let r = resolve_model_request(&format!("{model}-fast"));
             assert_eq!(r.model, model);
             assert_eq!(r.service_tier, Some(ServiceTier::Priority));
@@ -345,6 +362,8 @@ mod tests {
         assert!(uses_responses_lite("gpt-6-luna"));
         assert!(uses_responses_lite("gpt-6.1-sol"));
         assert!(uses_responses_lite("gpt-6.1-terra"));
+        assert!(uses_responses_lite("gpt-6.2-astra"));
+        assert!(uses_responses_lite("gpt-6.2-sol"));
     }
 
     #[test]
@@ -403,6 +422,16 @@ mod tests {
                 ServiceTier::Ultrafast,
                 ServiceTier::Ultrafast,
             ),
+            (
+                "gpt-6.2-astra",
+                ServiceTier::Ultrafast,
+                ServiceTier::Ultrafast,
+            ),
+            (
+                "gpt-6.2-sol",
+                ServiceTier::Ultrafast,
+                ServiceTier::Ultrafast,
+            ),
             ("gpt-6-sol", ServiceTier::Ultrafast, ServiceTier::Priority),
             ("gpt-6-luna", ServiceTier::Ultrafast, ServiceTier::Priority),
             ("gpt-6-sol", ServiceTier::Priority, ServiceTier::Priority),
@@ -433,6 +462,14 @@ mod tests {
         assert_eq!(
             tier_model_variants("gpt-6-astra"),
             ["gpt-6-astra-fast", "gpt-6-astra-ultrafast"]
+        );
+        assert_eq!(
+            tier_model_variants("gpt-6.2-astra"),
+            ["gpt-6.2-astra-fast", "gpt-6.2-astra-ultrafast"]
+        );
+        assert_eq!(
+            tier_model_variants("gpt-6.2-sol"),
+            ["gpt-6.2-sol-fast", "gpt-6.2-sol-ultrafast"]
         );
         assert_eq!(tier_model_variants("gpt-6-sol"), ["gpt-6-sol-fast"]);
     }
@@ -508,6 +545,8 @@ mod tests {
         assert!(assert_allowed_model("gpt-5.6-luna").is_ok());
         assert!(assert_allowed_model("gpt-6.1-sol").is_ok());
         assert!(assert_allowed_model("gpt-6.1-terra").is_ok());
+        assert!(assert_allowed_model("gpt-6.2-astra").is_ok());
+        assert!(assert_allowed_model("gpt-6.2-sol").is_ok());
     }
 
     #[test]
@@ -523,5 +562,7 @@ mod tests {
             assert!(listing.iter().any(|m| m == baseline), "{baseline} missing");
         }
         assert!(allowed_models_display().contains("gpt-6-astra"));
+        assert!(allowed_models_display().contains("gpt-6.2-astra"));
+        assert!(allowed_models_display().contains("gpt-6.2-sol"));
     }
 }

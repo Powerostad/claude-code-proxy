@@ -44,7 +44,7 @@ Claude-style aliases map to Codex models: `haiku` and `claude-haiku-*` to `gpt-6
 
 Append `-fast` to any registered Codex model to request `service_tier: "priority"`. For example, `gpt-6-sol-fast` selects `gpt-6-sol` with fast service.
 
-Append `-ultrafast` to a model that offers the ultrafast tier to request `service_tier: "ultrafast"`. `gpt-6-astra` and `gpt-6.1-sol` offer it today, so `gpt-6-astra-ultrafast` and `gpt-6.1-sol-ultrafast` are the ultrafast IDs.
+Append `-ultrafast` to a model that offers the ultrafast tier to request `service_tier: "ultrafast"`. `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6.2-astra`, and `gpt-6.2-sol` offer it today, so their `-ultrafast` forms are registered IDs.
 
 On `/v1/messages`, `CCP_CODEX_SERVICE_TIER` or `codex.serviceTier` takes precedence over either suffix. A forced `ultrafast` applies to models that offer it, and the proxy requests `priority` for the others. The OpenAI-compatible routes use only the suffix or, on `/v1/responses`, the request's own `service_tier`.
 
@@ -78,7 +78,7 @@ The gpt-5.6 and gpt-6 families use Responses Lite by default. Lite requires
 `parallel_tool_calls: false`, so function tools run serially. Set
 `codex.fullLane: true` or `CCP_CODEX_FULL_LANE=1` to use the full Responses lane
 for `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6.1-sol`,
-and `gpt-6.1-terra`. This permits parallel calls; the model still decides whether to batch tools, and explicit
+`gpt-6.1-terra`, `gpt-6.2-astra`, and `gpt-6.2-sol`. This permits parallel calls; the model still decides whether to batch tools, and explicit
 client restrictions on parallel tools remain effective.
 
 This is not a universal lane override: catalog-only models keep the lane
