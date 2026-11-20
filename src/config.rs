@@ -711,7 +711,7 @@ pub fn codex_previous_response_id() -> bool {
     {
         return val;
     }
-    false
+    true
 }
 
 pub fn codex_request_compression() -> bool {
@@ -1072,6 +1072,7 @@ mod tests {
         let mut guards = vec![
             EnvGuard::unset("CCP_BIND_ADDRESS"),
             EnvGuard::unset("CCP_CODEX_TRANSPORT"),
+            EnvGuard::unset("CCP_CODEX_PREVIOUS_RESPONSE_ID"),
             EnvGuard::unset("CCP_LOG_VERBOSE"),
             EnvGuard::unset("CCP_LOG_STDERR"),
             EnvGuard::unset("CCP_CODEX_REASONING_SUMMARY"),
@@ -1569,6 +1570,38 @@ mod tests {
         assert!(codex_server_compaction());
         let _disabled_env = EnvGuard::set("CCP_CODEX_SERVER_COMPACTION", "false");
         assert!(!codex_server_compaction());
+    }
+
+    #[test]
+    fn codex_previous_response_id_defaults_on_and_can_be_disabled() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config = tempfile::TempDir::new().unwrap();
+        let _env = isolated_env(&config);
+
+        assert!(codex_previous_response_id());
+
+        {
+            let _disabled = EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", "0");
+            assert!(!codex_previous_response_id());
+        }
+
+        std::fs::write(
+            config.path().join("config.json"),
+            r#"{"codex":{"previousResponseId":false}}"#,
+        )
+        .unwrap();
+        assert!(!codex_previous_response_id());
+
+        std::fs::write(
+            config.path().join("config.json"),
+            r#"{"codex":{"previousResponseId":true}}"#,
+        )
+        .unwrap();
+        assert!(codex_previous_response_id());
+        {
+            let _disabled = EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", "false");
+            assert!(!codex_previous_response_id());
+        }
     }
 
     #[test]
