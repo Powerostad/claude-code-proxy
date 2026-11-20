@@ -295,6 +295,8 @@ impl CodexProvider {
         );
         let turn_id = continuation.turn_id();
         let configured_transport = config::codex_transport();
+        let effective_transport =
+            client::effective_auto_transport(configured_transport, Some(&continuation));
         let transport = configured_transport.as_str();
         let upstream_started_at = Instant::now();
         let log = create_logger("codex");
@@ -304,6 +306,10 @@ impl CodexProvider {
             Some(serde_json::Map::from_iter([
                 ("reqId".to_string(), serde_json::json!(&req_id)),
                 ("transport".to_string(), serde_json::json!(transport)),
+                (
+                    "effectiveTransport".to_string(),
+                    serde_json::json!(effective_transport.as_str()),
+                ),
                 ("model".to_string(), serde_json::json!(&resolved.model)),
                 ("stream".to_string(), serde_json::json!(want_stream)),
                 (
@@ -321,6 +327,10 @@ impl CodexProvider {
                 (
                     "inputDeltaCount".to_string(),
                     serde_json::json!(continuation.candidate().input_delta.as_ref().map(Vec::len)),
+                ),
+                (
+                    "continuationDisabledReason".to_string(),
+                    serde_json::json!(continuation.candidate().disabled_reason),
                 ),
                 ("turnId".to_string(), serde_json::json!(turn_id)),
             ])),
@@ -344,7 +354,7 @@ impl CodexProvider {
                     compact_boundary,
                     attempt: compaction_attempt,
                 },
-                configured_transport,
+                effective_transport,
                 tail_is_successful_tool_result(&body),
             )
             .await;

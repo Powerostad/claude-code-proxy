@@ -1096,7 +1096,9 @@ impl CodexHttpClient {
         ctx: &RequestContext,
         continuation: Option<&super::continuation::ContinuationReservation>,
     ) -> Result<OwnerAwareCodexResponse, CodexError> {
-        self.post_codex_with_transport(body, ctx, continuation, crate::config::codex_transport())
+        let transport =
+            effective_auto_transport(crate::config::codex_transport(), continuation);
+        self.post_codex_with_transport(body, ctx, continuation, transport)
             .await
     }
 
@@ -1304,6 +1306,9 @@ impl CodexHttpClient {
         ctx: &RequestContext,
         continuation: Option<&super::continuation::ContinuationReservation>,
     ) -> Result<super::websocket::CodexWebSocketEventStream, CodexError> {
+        if websocket_pool_owner(continuation).is_none() {
+            return self.stream_codex_http_events_for_owner(body, ctx).await;
+        }
         let mut websocket = self
             .stream_codex_websocket_events_for_owner(body, ctx, continuation)
             .await?;
@@ -3160,6 +3165,24 @@ fn websocket_pool_owner(
         return None;
     }
     continuation.owner()
+}
+
+/// Resolve `auto` to the transport that can actually reuse a connection.
+///
+/// WebSocket pooling requires a continuation owner; without one every request
+/// would pay a fresh handshake and the global connect gate. HTTP keeps a
+/// shared keep-alive pool instead, so it is the better choice for stateless
+/// requests and for continuation opt-outs.
+pub(crate) fn effective_auto_transport(
+    configured: crate::config::CodexTransport,
+    continuation: Option<&super::continuation::ContinuationReservation>,
+) -> crate::config::CodexTransport {
+    use crate::config::CodexTransport;
+    if configured == CodexTransport::Auto && websocket_pool_owner(continuation).is_none() {
+        CodexTransport::Http
+    } else {
+        configured
+    }
 }
 
 fn should_reset_websocket_pool(
@@ -5481,6 +5504,49 @@ mod tests {
         assert_eq!(websocket_pool_owner(Some(&first_enabled)), Some(&owner));
         assert_eq!(websocket_pool_owner(Some(&append)), Some(&owner));
         assert_eq!(websocket_pool_owner(Some(&missing_identity)), None);
+    }
+
+    #[test]
+    fn effective_auto_transport_requires_a_pool_owner() {
+        use crate::config::CodexTransport;
+
+        let owner = ConversationIdentity::Main("session".into());
+        let disabled = test_continuation(Some(owner.clone()), None, None, None, Some("disabled"));
+        let first_enabled =
+            test_continuation(Some(owner.clone()), Some(1), None, None, Some("missing_state"));
+        let append = test_continuation(Some(owner.clone()), Some(2), Some("resp_1"), Some(1), None);
+        let missing_identity = test_continuation(None, None, None, None, Some("missing_identity"));
+
+        assert_eq!(
+            effective_auto_transport(CodexTransport::Auto, None),
+            CodexTransport::Http
+        );
+        assert_eq!(
+            effective_auto_transport(CodexTransport::Auto, Some(&disabled)),
+            CodexTransport::Http
+        );
+        assert_eq!(
+            effective_auto_transport(CodexTransport::Auto, Some(&missing_identity)),
+            CodexTransport::Http
+        );
+        // A first enabled turn has no previous response yet, but it must still
+        // use WebSocket so it can establish continuation state.
+        assert_eq!(
+            effective_auto_transport(CodexTransport::Auto, Some(&first_enabled)),
+            CodexTransport::Auto
+        );
+        assert_eq!(
+            effective_auto_transport(CodexTransport::Auto, Some(&append)),
+            CodexTransport::Auto
+        );
+        assert_eq!(
+            effective_auto_transport(CodexTransport::Http, Some(&append)),
+            CodexTransport::Http
+        );
+        assert_eq!(
+            effective_auto_transport(CodexTransport::WebSocket, Some(&disabled)),
+            CodexTransport::WebSocket
+        );
     }
 
     #[test]

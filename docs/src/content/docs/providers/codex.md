@@ -107,7 +107,7 @@ and quota accounting depend on the upstream subscription; this setting is opt-in
 
 ## Transport and continuation
 
-`auto` is the default transport: it uses WebSocket with HTTP SSE fallback only when setup fails before a request is sent. Set `CCP_CODEX_TRANSPORT=websocket` for WebSocket-only behavior, or `http` for HTTP SSE. A failure after a request is sent does not trigger HTTP replay.
+`auto` is the default transport: it uses WebSocket when the request can own a reusable continuation socket, and HTTP SSE otherwise. WebSocket setup failures fall back to HTTP SSE only when they occur before a request is sent. Set `CCP_CODEX_TRANSPORT=websocket` for WebSocket-only behavior, or `http` for HTTP SSE. A failure after a request is sent does not trigger HTTP replay.
 
 On the HTTP transport, the proxy waits five minutes for the response headers before failing the request. Codex withholds the response head until the model produces its first output, so a large request to a high-effort model can hold it for minutes. `CCP_CODEX_HEADER_TIMEOUT_MS` or `codex.headerTimeoutMs` changes that bound.
 
