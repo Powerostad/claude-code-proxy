@@ -1,5 +1,6 @@
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
+use claude_code_proxy::providers::codex::continuation::clear_all_continuations_for_tests;
 use claude_code_proxy::providers::codex::websocket::clear_codex_websocket_pool_for_tests;
 use claude_code_proxy::{registry::Registry, server::app};
 use futures_util::{SinkExt, StreamExt};
@@ -89,7 +90,10 @@ fn configure_codex(config_dir: &Path, base_url: &str) -> Vec<EnvGuard> {
         EnvGuard::set("CCP_ALIAS_PROVIDER", "codex"),
         EnvGuard::set("CCP_CODEX_TRANSPORT", "websocket"),
         EnvGuard::set("CCP_CODEX_BASE_URL", base_url),
-        EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", "0"),
+        // `auto` only selects WebSocket when the request can own a reusable
+        // continuation socket. These tests exercise WebSocket fallback and
+        // replay policy, so continuation must be enabled.
+        EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", "1"),
         EnvGuard::set("CCP_CODEX_SERVER_COMPACTION", "0"),
     ]
 }
@@ -323,6 +327,7 @@ async fn check_transport_policy(
     close_after_send: bool,
     stream: bool,
 ) {
+    clear_all_continuations_for_tests();
     clear_codex_websocket_pool_for_tests();
     let (origin_url, captured, stop, task) = spawn_transport_origin(close_after_send, stream).await;
     let result = {
@@ -386,6 +391,7 @@ async fn check_transport_policy(
         };
         assert_eq!(*captured, expected);
     }
+    clear_all_continuations_for_tests();
     clear_codex_websocket_pool_for_tests();
 }
 
