@@ -967,7 +967,7 @@ async fn live_stream_response_once(
     request_continuation: ContinuationReservation,
     request_body: translate::request::ResponsesRequest,
     compaction: LiveStreamCompaction,
-    configured_transport: config::CodexTransport,
+    effective_transport: config::CodexTransport,
     accept_empty: bool,
 ) -> LiveStreamStart {
     let estimated_input_tokens = estimate_translated_tokens(&request_body);
@@ -1057,8 +1057,8 @@ async fn live_stream_response_once(
                 Some(serde_json::Map::from_iter([
                     ("reqId".to_string(), serde_json::json!(&ctx.req_id)),
                     (
-                        "configuredTransport".to_string(),
-                        serde_json::json!(configured_transport.as_str()),
+                        "effectiveTransport".to_string(),
+                        serde_json::json!(effective_transport.as_str()),
                     ),
                     ("model".to_string(), serde_json::json!(model)),
                     ("stream".to_string(), serde_json::json!(true)),

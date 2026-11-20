@@ -14,7 +14,9 @@ pub fn count_translated_tokens(translated: &ResponsesRequest) -> u64 {
 
 /// Tokenizer-free estimate used to seed `message_start.usage.input_tokens`.
 /// The terminal `message_delta` carries the provider-reported usage, so this
-/// only needs to be close enough for the live progress display.
+/// only needs to be close enough for the live progress display. It tracks
+/// prose closely but can undercount dense text such as base64 or minified
+/// code by more than 2x until the terminal usage arrives.
 pub fn estimate_translated_tokens(translated: &ResponsesRequest) -> u64 {
     count_translated_tokens_with(translated, &approx_token_count_from_bytes)
 }
@@ -251,8 +253,37 @@ mod tests {
         assert!(estimate > 0);
         assert!(
             estimate * 2 > accurate && estimate < accurate * 2,
-            "estimate {estimate} should stay within 2x of accurate {accurate}"
+            "prose estimate {estimate} should stay within 2x of accurate {accurate}"
         );
+    }
+
+    #[test]
+    fn byte_estimate_undercounts_dense_text_within_its_documented_band() {
+        let cases = [
+            (
+                "base64",
+                "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo".repeat(112),
+                3,
+            ),
+            (
+                "minified js",
+                "function f(a){return a===0?1:a*f(a-1)};".repeat(96),
+                2,
+            ),
+        ];
+
+        for (label, text, max_ratio) in cases {
+            let accurate = approx_token_count(&text);
+            let estimate = approx_token_count_from_bytes(&text);
+            assert!(
+                estimate < accurate,
+                "{label}: bytes/4 should undercount dense text"
+            );
+            assert!(
+                estimate * max_ratio > accurate,
+                "{label}: estimate {estimate} should stay within {max_ratio}x of accurate {accurate}"
+            );
+        }
     }
 
     #[test]

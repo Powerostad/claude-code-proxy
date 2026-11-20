@@ -6,12 +6,12 @@ description: Release notes for claude-code-proxy.
 ## Unreleased
 
 - Codex continuation is now enabled by default. After the first turn of a
-  session, the proxy sends only the appended input and reuses the originating
-  WebSocket, which cuts latency and input-token usage on long conversations.
-  Set `CCP_CODEX_PREVIOUS_RESPONSE_ID=0` or `"previousResponseId": false` under
-  `codex` to restore full-context requests. Continuation state is held in
-  memory, expires after 30 minutes of inactivity, and is lost when the proxy
-  restarts.
+  session, eligible append-only turns send only the appended input and may
+  reuse the originating WebSocket, reducing latency and input-token usage on
+  long conversations. Set `CCP_CODEX_PREVIOUS_RESPONSE_ID=0` or
+  `"previousResponseId": false` under `codex` to restore full-context requests.
+  Continuation state is held in memory, expires after 30 minutes of inactivity,
+  and is lost when the proxy restarts.
 - `auto` transport now uses HTTP SSE directly when a request cannot own a
   reusable continuation socket, avoiding a per-request WebSocket handshake.
 

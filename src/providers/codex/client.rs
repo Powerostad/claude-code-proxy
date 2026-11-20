@@ -1080,14 +1080,9 @@ impl CodexHttpClient {
     ) -> Result<CodexResponse, CodexError> {
         let reservation =
             continuation.map(super::continuation::ContinuationReservation::from_public_candidate);
-        self.post_codex_with_transport(
-            body,
-            ctx,
-            reservation.as_ref(),
-            crate::config::codex_transport(),
-        )
-        .await
-        .map(OwnerAwareCodexResponse::into_response)
+        self.post_codex_for_owner(body, ctx, reservation.as_ref())
+            .await
+            .map(OwnerAwareCodexResponse::into_response)
     }
 
     pub(crate) async fn post_codex_for_owner(

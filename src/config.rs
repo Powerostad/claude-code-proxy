@@ -702,7 +702,11 @@ pub fn codex_user_agent(default: &str) -> String {
 pub fn codex_previous_response_id() -> bool {
     let env: HashMap<_, _> = std::env::vars().collect();
     if let Some(raw) = env.get("CCP_CODEX_PREVIOUS_RESPONSE_ID") {
-        return matches!(raw.to_ascii_lowercase().as_str(), "1" | "true" | "yes");
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => return true,
+            "0" | "false" | "no" | "off" => return false,
+            _ => {}
+        }
     }
     let config_dir = paths::config_dir();
     if let Some(file) = read_file_config(&config_dir)
@@ -1580,9 +1584,20 @@ mod tests {
 
         assert!(codex_previous_response_id());
 
-        {
-            let _disabled = EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", "0");
-            assert!(!codex_previous_response_id());
+        for raw in ["1", "true", "yes", "on", "ON"] {
+            let _enabled = EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", raw);
+            assert!(codex_previous_response_id(), "env {raw:?} should enable");
+        }
+        for raw in ["0", "false", "no", "off", " false "] {
+            let _disabled = EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", raw);
+            assert!(!codex_previous_response_id(), "env {raw:?} should disable");
+        }
+        for raw in ["", "unknown"] {
+            let _fallthrough = EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", raw);
+            assert!(
+                codex_previous_response_id(),
+                "unknown env {raw:?} should fall through to the default"
+            );
         }
 
         std::fs::write(
@@ -1591,6 +1606,14 @@ mod tests {
         )
         .unwrap();
         assert!(!codex_previous_response_id());
+        {
+            let _fallthrough = EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", "unknown");
+            assert!(!codex_previous_response_id());
+        }
+        {
+            let _enabled = EnvGuard::set("CCP_CODEX_PREVIOUS_RESPONSE_ID", "on");
+            assert!(codex_previous_response_id());
+        }
 
         std::fs::write(
             config.path().join("config.json"),
