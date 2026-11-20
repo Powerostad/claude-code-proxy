@@ -9,21 +9,39 @@ use tiktoken_rs::o200k_base_singleton;
 /// and protocol framing still use local estimates, so the result is not a
 /// provider billing count.
 pub fn count_translated_tokens(translated: &ResponsesRequest) -> u64 {
+    count_translated_tokens_with(translated, &approx_token_count)
+}
+
+/// Tokenizer-free estimate used to seed `message_start.usage.input_tokens`.
+/// The terminal `message_delta` carries the provider-reported usage, so this
+/// only needs to be close enough for the live progress display.
+pub fn estimate_translated_tokens(translated: &ResponsesRequest) -> u64 {
+    count_translated_tokens_with(translated, &approx_token_count_from_bytes)
+}
+
+fn approx_token_count_from_bytes(text: &str) -> u64 {
+    u64::try_from(text.len()).unwrap_or(u64::MAX).div_ceil(4)
+}
+
+fn count_translated_tokens_with(
+    translated: &ResponsesRequest,
+    text_tokens: &dyn Fn(&str) -> u64,
+) -> u64 {
     let mut total = 0u64;
 
     // Instructions
     if let Some(ref instructions) = translated.instructions {
-        total += approx_token_count(instructions);
+        total += text_tokens(instructions);
     }
 
     // Input items
     for item in &translated.input {
-        total += count_input_item_tokens(item);
+        total += count_input_item_tokens(item, text_tokens);
     }
 
     // Tools
     if let Some(ref tools) = translated.tools {
-        total += count_tool_tokens(tools);
+        total += count_tool_tokens(tools, text_tokens);
     }
 
     // Overhead
@@ -31,29 +49,29 @@ pub fn count_translated_tokens(translated: &ResponsesRequest) -> u64 {
     total += translated.tools.as_ref().map_or(0, |t| t.len() as u64 * 4);
 
     // Model name
-    total += approx_token_count(&translated.model);
+    total += text_tokens(&translated.model);
 
     total.max(1)
 }
 
-fn count_input_item_tokens(item: &ResponsesInputItem) -> u64 {
+fn count_input_item_tokens(item: &ResponsesInputItem, text_tokens: &dyn Fn(&str) -> u64) -> u64 {
     match item {
         ResponsesInputItem::AdditionalTools { tools, .. } => tools
             .iter()
-            .map(|tool| approx_token_count(&serde_json::to_string(tool).unwrap_or_default()))
+            .map(|tool| text_tokens(&serde_json::to_string(tool).unwrap_or_default()))
             .sum(),
         ResponsesInputItem::Message { content, .. } => {
             let mut total = 0u64;
             for part in content {
-                total += count_content_part_tokens(part);
+                total += count_content_part_tokens(part, text_tokens);
             }
             total
         }
         ResponsesInputItem::FunctionCall {
             name, arguments, ..
-        } => approx_token_count(name) + approx_token_count(arguments),
+        } => text_tokens(name) + text_tokens(arguments),
         ResponsesInputItem::FunctionCallOutput { output, .. } => {
-            count_function_call_output_tokens(output)
+            count_function_call_output_tokens(output, text_tokens)
         }
         ResponsesInputItem::Reasoning {
             encrypted_content, ..
@@ -65,15 +83,16 @@ fn count_input_item_tokens(item: &ResponsesInputItem) -> u64 {
     }
 }
 
-fn count_function_call_output_tokens(output: &ResponsesFunctionCallOutput) -> u64 {
+fn count_function_call_output_tokens(
+    output: &ResponsesFunctionCallOutput,
+    text_tokens: &dyn Fn(&str) -> u64,
+) -> u64 {
     match output {
-        ResponsesFunctionCallOutput::Text(text) => approx_token_count(text),
+        ResponsesFunctionCallOutput::Text(text) => text_tokens(text),
         ResponsesFunctionCallOutput::ContentItems(content) => content
             .iter()
             .map(|part| match part {
-                ResponsesFunctionCallOutputContentPart::InputText { text } => {
-                    approx_token_count(text)
-                }
+                ResponsesFunctionCallOutputContentPart::InputText { text } => text_tokens(text),
                 ResponsesFunctionCallOutputContentPart::InputImage { .. } => 2000,
             })
             .sum(),
@@ -90,25 +109,27 @@ fn approx_reasoning_token_count(encoded_content: &str) -> u64 {
     u64::try_from(model_visible_bytes.saturating_add(3) / 4).unwrap_or(u64::MAX)
 }
 
-fn count_content_part_tokens(part: &ResponsesContentPart) -> u64 {
+fn count_content_part_tokens(
+    part: &ResponsesContentPart,
+    text_tokens: &dyn Fn(&str) -> u64,
+) -> u64 {
     match part {
-        ResponsesContentPart::InputText { text } => approx_token_count(text),
-        ResponsesContentPart::OutputText { text } => approx_token_count(text),
+        ResponsesContentPart::InputText { text } => text_tokens(text),
+        ResponsesContentPart::OutputText { text } => text_tokens(text),
         ResponsesContentPart::InputImage { .. } => 2000, // Image token estimate
     }
 }
 
-fn count_tool_tokens(tools: &[ResponsesTool]) -> u64 {
+fn count_tool_tokens(tools: &[ResponsesTool], text_tokens: &dyn Fn(&str) -> u64) -> u64 {
     let mut total = 0u64;
     for tool in tools {
         match tool {
             ResponsesTool::Function(f) => {
-                total += approx_token_count(&f.name);
+                total += text_tokens(&f.name);
                 if let Some(ref desc) = f.description {
-                    total += approx_token_count(desc);
+                    total += text_tokens(desc);
                 }
-                total +=
-                    approx_token_count(&serde_json::to_string(&f.parameters).unwrap_or_default());
+                total += text_tokens(&serde_json::to_string(&f.parameters).unwrap_or_default());
             }
             ResponsesTool::WebSearch(_) => {
                 total += 10; // fixed overhead for web search tool
@@ -205,6 +226,50 @@ mod tests {
     }
 
     #[test]
+    fn estimate_tracks_the_accurate_count_without_a_tokenizer() {
+        let req: ResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-5.5",
+            "instructions": "You are a helpful assistant. ".repeat(100),
+            "input": [{
+                "type": "message",
+                "role": "user",
+                "content": [{
+                    "type": "input_text",
+                    "text": "The quick brown fox jumps over the lazy dog. ".repeat(500)
+                }]
+            }],
+            "store": false,
+            "stream": true,
+            "parallel_tool_calls": true,
+            "text": {"verbosity": "low"},
+        }))
+        .unwrap();
+
+        let accurate = count_translated_tokens(&req);
+        let estimate = estimate_translated_tokens(&req);
+
+        assert!(estimate > 0);
+        assert!(
+            estimate * 2 > accurate && estimate < accurate * 2,
+            "estimate {estimate} should stay within 2x of accurate {accurate}"
+        );
+    }
+
+    #[test]
+    fn estimate_keeps_empty_requests_nonzero() {
+        let req: ResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-5.5",
+            "input": [],
+            "store": false,
+            "stream": true,
+            "parallel_tool_calls": true,
+            "text": {"verbosity": "low"},
+        }))
+        .unwrap();
+        assert!(estimate_translated_tokens(&req) > 0);
+    }
+
+    #[test]
     fn o200k_counts_unbroken_text_instead_of_collapsing_it() {
         assert_eq!(approx_token_count(&"a".repeat(4096)), 512);
         assert_eq!(approx_token_count(&"汉字测试上下文压缩".repeat(384)), 2688);
@@ -246,8 +311,8 @@ mod tests {
         ]);
 
         assert_eq!(
-            count_function_call_output_tokens(&mixed),
-            count_function_call_output_tokens(&text) + 2000
+            count_function_call_output_tokens(&mixed, &approx_token_count),
+            count_function_call_output_tokens(&text, &approx_token_count) + 2000
         );
     }
 

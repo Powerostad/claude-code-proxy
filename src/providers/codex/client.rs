@@ -1096,8 +1096,7 @@ impl CodexHttpClient {
         ctx: &RequestContext,
         continuation: Option<&super::continuation::ContinuationReservation>,
     ) -> Result<OwnerAwareCodexResponse, CodexError> {
-        let transport =
-            effective_auto_transport(crate::config::codex_transport(), continuation);
+        let transport = effective_auto_transport(crate::config::codex_transport(), continuation);
         self.post_codex_with_transport(body, ctx, continuation, transport)
             .await
     }
@@ -5512,8 +5511,13 @@ mod tests {
 
         let owner = ConversationIdentity::Main("session".into());
         let disabled = test_continuation(Some(owner.clone()), None, None, None, Some("disabled"));
-        let first_enabled =
-            test_continuation(Some(owner.clone()), Some(1), None, None, Some("missing_state"));
+        let first_enabled = test_continuation(
+            Some(owner.clone()),
+            Some(1),
+            None,
+            None,
+            Some("missing_state"),
+        );
         let append = test_continuation(Some(owner.clone()), Some(2), Some("resp_1"), Some(1), None);
         let missing_identity = test_continuation(None, None, None, None, Some("missing_identity"));
 
