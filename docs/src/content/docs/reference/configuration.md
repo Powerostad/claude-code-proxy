@@ -25,7 +25,7 @@ These settings configure the proxy process. Claude Code client settings such as 
     "baseUrl": "https://chatgpt.com/backend-api/codex/responses",
     "transport": "auto",
     "headerTimeoutMs": 300000,
-    "previousResponseId": false,
+    "previousResponseId": true,
     "serverCompaction": false,
     "responsesApi": false,
     "fullLane": false,
@@ -109,9 +109,9 @@ Proxy URLs may use `http`, `https`, `socks4`, `socks4a`, `socks5`, or `socks5h`.
 | `CCP_CODEX_REASONING_SUMMARY` | `codex.reasoningSummary` | unset | Overrides summary mode. `off` and `none` suppress summaries. |
 | `CCP_CODEX_SERVICE_TIER` | `codex.serviceTier` | unset | Forces `fast`, `priority`, `ultrafast`, or `flex` on `/v1/messages` requests. Fast is sent as `priority`. Ultrafast is sent as `priority` to models that do not offer it. |
 | `CCP_CODEX_BASE_URL` | `codex.baseUrl` | ChatGPT Codex Responses URL | Changes the Codex endpoint. |
-| `CCP_CODEX_TRANSPORT` | `codex.transport` | `auto` | Selects `websocket`, `http`, or `auto`. `auto` falls back to HTTP SSE only when WebSocket setup fails before a request is sent. |
+| `CCP_CODEX_TRANSPORT` | `codex.transport` | `auto` | Selects `websocket`, `http`, or `auto`. `auto` uses WebSocket only when the request can own a reusable continuation socket, and otherwise uses HTTP SSE. WebSocket setup failures fall back to HTTP SSE only before a request is sent. |
 | `CCP_CODEX_HEADER_TIMEOUT_MS` | `codex.headerTimeoutMs` | `300000` | Sets how long an HTTP-transport request waits for the Codex response headers. Values below `1000` are ignored. |
-| `CCP_CODEX_PREVIOUS_RESPONSE_ID` | `codex.previousResponseId` | `false` | Enables append-only WebSocket continuation for `1`, `true`, or `yes`. |
+| `CCP_CODEX_PREVIOUS_RESPONSE_ID` | `codex.previousResponseId` | `true` | Controls append-only WebSocket continuation. Enabled by default; `0`, `false`, or `no` disables it. |
 | `CCP_CODEX_SERVER_COMPACTION` | `codex.serverCompaction` | `false` | Enables or disables native compaction for standard boolean words. |
 | `CCP_CODEX_RESPONSES_API` | `codex.responsesApi` | `false` | Enables `/v1/responses` and `/v1/chat/completions` for every registered provider. Accepts `1`, `true`, or `yes`. |
 | `CCP_CODEX_FULL_LANE` | `codex.fullLane` | `false` | Enables parallel tool calls on the six [supported full-lane models](/providers/codex/#responses-lanes-and-parallel-tools). Luna and catalog-only models keep their default lane. Accepts `1`, `true`, or `yes`. |

@@ -46,7 +46,7 @@ use self::continuation::{
     ContinuationReservation, abort_continuation_for_owner, continuation_candidate_for_owner,
     record_continuation_for_owner,
 };
-use self::count_tokens::count_translated_tokens;
+use self::count_tokens::{count_translated_tokens, estimate_translated_tokens};
 use self::translate::accumulate::accumulate_response_with_traffic;
 use self::translate::live_stream::LiveStreamTranslator;
 use self::translate::model_allowlist::{
@@ -295,6 +295,8 @@ impl CodexProvider {
         );
         let turn_id = continuation.turn_id();
         let configured_transport = config::codex_transport();
+        let effective_transport =
+            client::effective_auto_transport(configured_transport, Some(&continuation));
         let transport = configured_transport.as_str();
         let upstream_started_at = Instant::now();
         let log = create_logger("codex");
@@ -304,6 +306,10 @@ impl CodexProvider {
             Some(serde_json::Map::from_iter([
                 ("reqId".to_string(), serde_json::json!(&req_id)),
                 ("transport".to_string(), serde_json::json!(transport)),
+                (
+                    "effectiveTransport".to_string(),
+                    serde_json::json!(effective_transport.as_str()),
+                ),
                 ("model".to_string(), serde_json::json!(&resolved.model)),
                 ("stream".to_string(), serde_json::json!(want_stream)),
                 (
@@ -321,6 +327,10 @@ impl CodexProvider {
                 (
                     "inputDeltaCount".to_string(),
                     serde_json::json!(continuation.candidate().input_delta.as_ref().map(Vec::len)),
+                ),
+                (
+                    "continuationDisabledReason".to_string(),
+                    serde_json::json!(continuation.candidate().disabled_reason),
                 ),
                 ("turnId".to_string(), serde_json::json!(turn_id)),
             ])),
@@ -344,7 +354,7 @@ impl CodexProvider {
                     compact_boundary,
                     attempt: compaction_attempt,
                 },
-                configured_transport,
+                effective_transport,
                 tail_is_successful_tool_result(&body),
             )
             .await;
@@ -492,7 +502,7 @@ impl CodexProvider {
         );
 
         if want_stream {
-            let estimated_input_tokens = count_translated_tokens(&translated);
+            let estimated_input_tokens = estimate_translated_tokens(&translated);
             let sse_bytes = match translate_stream_bytes_with_traffic(
                 &upstream.body,
                 &message_id,
@@ -639,7 +649,17 @@ impl Provider for CodexProvider {
             }
         };
 
-        let tokens = count_translated_tokens(&translated);
+        let tokens =
+            match tokio::task::spawn_blocking(move || count_translated_tokens(&translated)).await {
+                Ok(tokens) => tokens,
+                Err(error) => {
+                    return json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "api_error",
+                        format!("token counting failed: {error}"),
+                    );
+                }
+            };
         if let Some(monitor) = ctx.monitor.as_ref() {
             monitor.usage_updated(&ctx.req_id, Some(tokens), None);
         }
@@ -947,10 +967,10 @@ async fn live_stream_response_once(
     request_continuation: ContinuationReservation,
     request_body: translate::request::ResponsesRequest,
     compaction: LiveStreamCompaction,
-    configured_transport: config::CodexTransport,
+    effective_transport: config::CodexTransport,
     accept_empty: bool,
 ) -> LiveStreamStart {
-    let estimated_input_tokens = count_translated_tokens(&request_body);
+    let estimated_input_tokens = estimate_translated_tokens(&request_body);
     let mut translator = LiveStreamTranslator::with_estimated_input_tokens(
         message_id,
         model.to_string(),
@@ -1037,8 +1057,8 @@ async fn live_stream_response_once(
                 Some(serde_json::Map::from_iter([
                     ("reqId".to_string(), serde_json::json!(&ctx.req_id)),
                     (
-                        "configuredTransport".to_string(),
-                        serde_json::json!(configured_transport.as_str()),
+                        "effectiveTransport".to_string(),
+                        serde_json::json!(effective_transport.as_str()),
                     ),
                     ("model".to_string(), serde_json::json!(model)),
                     ("stream".to_string(), serde_json::json!(true)),
